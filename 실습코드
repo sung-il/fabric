@@ -1,0 +1,1025 @@
+# 실습 네트워크 구조 설명
+
+...
+
+# 실습
+
+# cli 컨테이너 접속
+docker container exec -it cli bash
+
+# 오더러 인증서 및 채널 설정
+export ORDERER_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+export CHANNEL_NAME=mychannel
+
+# test 체인코드 설정
+export CC_NAME=mysmallbank
+export CC_VERSION=1.0
+export CC_LANGUAGE=golang
+export CC_PATH=/opt/gopath/src/github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank
+export CC_PATH=github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank
+
+# 체인코드 설치
+CORE_PEER_ADDRESS=peer0.org1.example.com:7051 \
+CORE_PEER_LOCALMSPID=Org1MSP \
+CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp \
+PEER0_ORG1_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+
+CORE_PEER_ADDRESS=peer1.org1.example.com:8051 \
+CORE_PEER_LOCALMSPID=Org1MSP \
+CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp \
+PEER0_ORG1_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+
+CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+CORE_PEER_LOCALMSPID=Org2MSP \
+PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+
+CORE_PEER_ADDRESS=peer1.org2.example.com:10051 \
+CORE_PEER_LOCALMSPID=Org2MSP \
+PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+
+# 체인코드 인스턴스화
+## 인스턴스화된 체인코드 확인
+peer chaincode list --instantiated -C $CHANNEL_NAME
+
+## 인스턴스화
+peer chaincode instantiate -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -c '{"Args":[""]}' -P "OR('Org1MSP.member','Org2MSP.member')"
+
+## 인스턴스화된 체인코드 확인
+peer chaincode list --instantiated -C $CHANNEL_NAME
+
+
+# invoke (create_account)
+peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'
+
+# query (index: user_id)
+peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","1"]}'
+peer chaincode query -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["query", "1"]}'
+
+# 중복 계정 생성시 에러
+peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'
+
+# b, c 계정 생성
+peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","2", "b", "150", "150"]}'
+peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","3", "c", "300", "300"]}'
+
+# 계정 조회
+peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","3"]}'
+
+# org2 invoke
+CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+CORE_PEER_LOCALMSPID=Org2MSP \
+PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","4", "d", "100", "100"]}'
+
+# 조회
+peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","4"]}'
+
+
+# endorsement policy
+
+# test 체인코드 설정
+export CC_NAME=mysmallbankEndor
+export CC_VERSION=1.0
+export CC_LANGUAGE=golang
+export CC_PATH=/opt/gopath/src/github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank
+export CC_PATH=github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank
+
+# 체인코드 설치
+CORE_PEER_ADDRESS=peer0.org1.example.com:7051 \
+CORE_PEER_LOCALMSPID=Org1MSP \
+CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp \
+PEER0_ORG1_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+
+CORE_PEER_ADDRESS=peer1.org1.example.com:8051 \
+CORE_PEER_LOCALMSPID=Org1MSP \
+CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp \
+PEER0_ORG1_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+
+CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+CORE_PEER_LOCALMSPID=Org2MSP \
+PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+
+CORE_PEER_ADDRESS=peer1.org2.example.com:10051 \
+CORE_PEER_LOCALMSPID=Org2MSP \
+PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+
+# 체인코드 인스턴스화
+## 인스턴스화된 체인코드 확인
+peer chaincode list --instantiated -C $CHANNEL_NAME
+
+## 인스턴스화
+peer chaincode instantiate -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -c '{"Args":[""]}' -P "AND('Org1MSP.member','Org2MSP.member')"
+
+## 인스턴스화된 체인코드 확인
+peer chaincode list --instantiated -C $CHANNEL_NAME
+
+
+# invoke (create_account)
+peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'
+
+peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","1"]}'
+
+CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+CORE_PEER_LOCALMSPID=Org2MSP \
+PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'
+
+CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+CORE_PEER_LOCALMSPID=Org2MSP \
+PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","1"]}'
+
+
+# 보증 정책을 만족하는 트랜잭션
+peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}' \
+--peerAddresses peer0.org1.example.com:7051 \
+--tlsRootCertFiles /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+--peerAddresses peer0.org2.example.com:9051 \
+--tlsRootCertFiles /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+
+# 테스트 로그
+-----
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#  peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}' \
+2020-05-31 07:01:41.575 UTC [chaincodeCmd] chaincodeInvokeOrQuery -> INFO 001 Chaincode invoke successful. result: status:200
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}' \
+> --peerAddresses peer0.org1.example.com:7051 \
+> --tlsRootCertFiles /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> --peerAddresses peer0.org2.example.com:9051 \
+> --tlsRootCertFiles /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+2020-05-31 07:02:40.307 UTC [chaincodeCmd] chaincodeInvokeOrQuery -> INFO 001 Chaincode invoke successful. result: status:200
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'
+Error: endorsement failure during invoke. response: status:500 message:"{\"error\":Can not create duplicated account}"
+-----
+
+# 값이 다를 때 확인
+peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","3", "c", "150", "150"]}'
+
+peer chaincode query -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["query","3"]}'
+
+CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+CORE_PEER_LOCALMSPID=Org2MSP \
+PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","3", "c", "100", "100"]}'
+
+CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+CORE_PEER_LOCALMSPID=Org2MSP \
+PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode query -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["query","3"]}'
+
+peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","3", "c", "300", "300"]}' \
+--peerAddresses peer0.org1.example.com:7051 \
+--tlsRootCertFiles /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+--peerAddresses peer0.org2.example.com:9051 \
+--tlsRootCertFiles /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+
+peer chaincode query -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["query","3"]}'
+
+
+실행로그
+-----
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","3", "c", "150", "150"]}'
+2020-05-31 07:18:53.441 UTC [chaincodeCmd] chaincodeInvokeOrQuery -> INFO 001 Chaincode invoke successful. result: status:200
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["query","3"]}'
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+> CORE_PEER_LOCALMSPID=Org2MSP \
+> PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+> CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+> peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","3", "c", "100", "100"]}'
+2020-05-31 07:19:04.837 UTC [chaincodeCmd] chaincodeInvokeOrQuery -> INFO 001 Chaincode invoke successful. result: status:200
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+> CORE_PEER_LOCALMSPID=Org2MSP \
+> PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+> CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+> peer chaincode query -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["query","3"]}'
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","3", "c", "300", "300"]}' \
+> --peerAddresses peer0.org1.example.com:7051 \
+> --tlsRootCertFiles /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> --peerAddresses peer0.org2.example.com:9051 \
+> --tlsRootCertFiles /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+2020-05-31 07:19:33.506 UTC [chaincodeCmd] chaincodeInvokeOrQuery -> INFO 001 Chaincode invoke successful. result: status:200
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["query","3"]}'
+{"CustomId":"3","CustomName":"c","SavingsBalance":300,"CheckingBalance":300}
+-----
+
+# 네트워크 확인
+# http://127.0.0.1:8090/#/transactions 
+
+
+실행 로그
+~/fabric-samples/first-network tags/v1.4.6*
+❯ docker exec -it cli bash
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# ls crypto/
+ordererOrganizations/ peerOrganizations/
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# git
+usage: git [--version] [--help] [-C <path>] [-c <name>=<value>]
+           [--exec-path[=<path>]] [--html-path] [--man-path] [--info-path]
+           [-p | --paginate | --no-pager] [--no-replace-objects] [--bare]
+           [--git-dir=<path>] [--work-tree=<path>] [--namespace=<name>]
+           <command> [<args>]
+
+These are common Git commands used in various situations:
+
+start a working area (see also: git help tutorial)
+   clone      Clone a repository into a new directory
+   init       Create an empty Git repository or reinitialize an existing one
+
+work on the current change (see also: git help everyday)
+   add        Add file contents to the index
+   mv         Move or rename a file, a directory, or a symlink
+   reset      Reset current HEAD to the specified state
+   rm         Remove files from the working tree and from the index
+
+examine the history and state (see also: git help revisions)
+   bisect     Use binary search to find the commit that introduced a bug
+   grep       Print lines matching a pattern
+   log        Show commit logs
+   show       Show various types of objects
+   status     Show the working tree status
+
+grow, mark and tweak your common history
+   branch     List, create, or delete branches
+   checkout   Switch branches or restore working tree files
+   commit     Record changes to the repository
+   diff       Show changes between commits, commit and working tree, etc
+   merge      Join two or more development histories together
+   rebase     Reapply commits on top of another base tip
+   tag        Create, list, delete or verify a tag object signed with GPG
+
+collaborate (see also: git help workflows)
+   fetch      Download objects and refs from another repository
+   pull       Fetch from and integrate with another repository or a local branch
+   push       Update remote refs along with associated objects
+
+'git help -a' and 'git help -g' list available subcommands and some
+concept guides. See 'git help <command>' or 'git help <concept>'
+to read about a specific subcommand or concept.
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# go
+Go is a tool for managing Go source code.
+
+Usage:
+
+	go <command> [arguments]
+
+The commands are:
+
+	bug         start a bug report
+	build       compile packages and dependencies
+	clean       remove object files and cached files
+	doc         show documentation for package or symbol
+	env         print Go environment information
+	fix         update packages to use new APIs
+	fmt         gofmt (reformat) package sources
+	generate    generate Go files by processing source
+	get         download and install packages and dependencies
+	install     compile and install packages and dependencies
+	list        list packages or modules
+	mod         module maintenance
+	run         compile and run Go program
+	test        test packages
+	tool        run specified go tool
+	version     print Go version
+	vet         report likely mistakes in packages
+
+Use "go help <command>" for more information about a command.
+
+Additional help topics:
+
+	buildmode   build modes
+	c           calling between Go and C
+	cache       build and test caching
+	environment environment variables
+	filetype    file types
+	go.mod      the go.mod file
+	gopath      GOPATH environment variable
+	gopath-get  legacy GOPATH go get
+	goproxy     module proxy protocol
+	importpath  import path syntax
+	modules     modules, module versions, and more
+	module-get  module-aware go get
+	packages    package lists and patterns
+	testflag    testing flags
+	testfunc    testing functions
+
+Use "go help <topic>" for more information about that topic.
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# go get github.com/nexledger/accelerator
+package github.com/nexledger/accelerator: no Go files in /opt/gopath/src/github.com/nexledger/accelerator
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# ls ../../..
+chaincode  hyperledger  nexledger
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# ls
+channel-artifacts  crypto  log.txt  mychannel.block  scripts
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# ls ../../../nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank/
+smallbank.go
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export ORDERER_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CHANNEL_NAME=mychannel
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CC_NAME=mysmallbank
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CC_VERSION=1.0
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CC_LANGUAGE=go
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CC_PATH=/opt/gopath/src/github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer1.org1.example.com:8051 \
+> CORE_PEER_LOCALMSPID=Org1MSP \
+> CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp \
+> PEER0_ORG1_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+ypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+
+CORE_PEER_ADDRESS=peer1.org2.example.com:10051 \
+CORE_PEER_LOCALMSPID=Org2MSP \
+PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+2020-05-31 05:32:19.758 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 05:32:19.758 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+Error: error getting chaincode code mysmallbank: Unknown chaincodeType: UNDEFINED
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+> CORE_PEER_LOCALMSPID=Org2MSP \
+> PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+> CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+> peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+2020-05-31 05:32:19.900 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 05:32:19.900 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+Error: error getting chaincode code mysmallbank: Unknown chaincodeType: UNDEFINED
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer1.org2.example.com:10051 \
+> CORE_PEER_LOCALMSPID=Org2MSP \
+> PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+> CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+> peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+2020-05-31 05:32:20.044 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 05:32:20.044 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+Error: error getting chaincode code mysmallbank: Unknown chaincodeType: UNDEFINED
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# Error: error getting chaincode code mysmallbank: Unknown chaincodeType: UNDEFINED
+bash: Error:: command not found
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CC_LANGUAGE=golang
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org1.example.com:7051 \
+> CORE_PEER_LOCALMSPID=Org1MSP \
+> CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp \
+> PEER0_ORG1_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+2020-05-31 05:36:18.235 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 05:36:18.235 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+Error: error getting chaincode code mysmallbank: path to chaincode does not exist: /opt/gopath/src/opt/gopath/src/github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode list --installed
+Get installed chaincodes on peer:
+Name: mycc, Version: 1.0, Path: github.com/chaincode/chaincode_example02/go/, Id: 333a19b11063d0ade7be691f9f22c04ad369baba15660f7ae9511fd1a6488209
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# ls /opt/gopath/src/export CC_PATH=github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank^C
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CC_PATH=github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org1.example.com:7051 \
+> CORE_PEER_LOCALMSPID=Org1MSP \
+> CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp \
+> PEER0_ORG1_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+2020-05-31 05:38:26.251 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 05:38:26.252 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+2020-05-31 05:38:26.790 UTC [chaincodeCmd] install -> INFO 003 Installed remotely response:<status:200 payload:"OK" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer1.org1.example.com:8051 \
+> CORE_PEER_LOCALMSPID=Org1MSP \
+> CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp \
+> PEER0_ORG1_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+ypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+
+CORE_PEER_ADDRESS=peer1.org2.example.com:10051 \
+CORE_PEER_LOCALMSPID=Org2MSP \
+PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH2020-05-31 05:38:43.068 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 05:38:43.068 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+2020-05-31 05:38:43.369 UTC [chaincodeCmd] install -> INFO 003 Installed remotely response:<status:200 payload:"OK" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+> CORE_PEER_LOCALMSPID=Org2MSP \
+> PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+> CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+> peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+2020-05-31 05:38:43.495 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 05:38:43.495 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+2020-05-31 05:38:43.812 UTC [chaincodeCmd] install -> INFO 003 Installed remotely response:<status:200 payload:"OK" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer1.org2.example.com:10051 \
+> CORE_PEER_LOCALMSPID=Org2MSP \
+> PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+> CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+> peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+2020-05-31 05:38:46.092 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 05:38:46.092 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+2020-05-31 05:38:46.399 UTC [chaincodeCmd] install -> INFO 003 Installed remotely response:<status:200 payload:"OK" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode list --installed
+Get installed chaincodes on peer:
+Name: mycc, Version: 1.0, Path: github.com/chaincode/chaincode_example02/go/, Id: 333a19b11063d0ade7be691f9f22c04ad369baba15660f7ae9511fd1a6488209
+Name: mysmallbank, Version: 1.0, Path: github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank, Id: d749d6db160c6a2f07fe144ea0d59ef1b6ee20c57abfb6f6629a1dbc98ee6398
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode list --instantiated -C $CHANNEL_NAME
+Get instantiated chaincodes on channel mychannel:
+Name: mycc, Version: 1.0, Path: github.com/chaincode/chaincode_example02/go/, Escc: escc, Vscc: vscc
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode instantiate -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -c '{"Args":[""]}' -P "OR('Org1MSP.member','Org2MSP.member')"
+2020-05-31 05:40:32.698 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 05:40:32.699 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode list --instantiated -C $CHANNEL_NAME
+Get instantiated chaincodes on channel mychannel:
+Name: mycc, Version: 1.0, Path: github.com/chaincode/chaincode_example02/go/, Escc: escc, Vscc: vscc
+Name: mysmallbank, Version: 1.0, Path: github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank, Escc: escc, Vscc: vscc
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#peer chaincode qeury
+Operate a chaincode: install|instantiate|invoke|package|query|signpackage|upgrade|list.
+
+Usage:
+  peer chaincode [command]
+
+Available Commands:
+  install     Package the specified chaincode into a deployment spec and save it on the peer's path.
+  instantiate Deploy the specified chaincode to the network.
+  invoke      Invoke the specified chaincode.
+  list        Get the instantiated chaincodes on a channel or installed chaincodes on a peer.
+  package     Package the specified chaincode into a deployment spec.
+  query       Query using the specified chaincode.
+  signpackage Sign the specified chaincode package
+  upgrade     Upgrade chaincode.
+
+Flags:
+      --cafile string                       Path to file containing PEM-encoded trusted certificate(s) for the ordering endpoint
+      --certfile string                     Path to file containing PEM-encoded X509 public key to use for mutual TLS communication with the orderer endpoint
+      --clientauth                          Use mutual TLS when communicating with the orderer endpoint
+      --connTimeout duration                Timeout for client to connect (default 3s)
+  -h, --help                                help for chaincode
+      --keyfile string                      Path to file containing PEM-encoded private key to use for mutual TLS communication with the orderer endpoint
+  -o, --orderer string                      Ordering service endpoint
+      --ordererTLSHostnameOverride string   The hostname override to use when validating the TLS connection to the orderer.
+      --tls                                 Use TLS when communicating with the orderer endpoint
+      --transient string                    Transient map of arguments in JSON encoding
+
+Use "peer chaincode [command] --help" for more information about a command.
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode qeury -C mychannel -n mysmallbank -c '{\"Args\":[\"query\",\"a\"]}'
+Error: unknown shorthand flag: 'C' in -C
+Usage:
+  peer chaincode [command]
+
+Available Commands:
+  install     Package the specified chaincode into a deployment spec and save it on the peer's path.
+  instantiate Deploy the specified chaincode to the network.
+  invoke      Invoke the specified chaincode.
+  list        Get the instantiated chaincodes on a channel or installed chaincodes on a peer.
+  package     Package the specified chaincode into a deployment spec.
+  query       Query using the specified chaincode.
+  signpackage Sign the specified chaincode package
+  upgrade     Upgrade chaincode.
+
+Flags:
+      --cafile string                       Path to file containing PEM-encoded trusted certificate(s) for the ordering endpoint
+      --certfile string                     Path to file containing PEM-encoded X509 public key to use for mutual TLS communication with the orderer endpoint
+      --clientauth                          Use mutual TLS when communicating with the orderer endpoint
+      --connTimeout duration                Timeout for client to connect (default 3s)
+  -h, --help                                help for chaincode
+      --keyfile string                      Path to file containing PEM-encoded private key to use for mutual TLS communication with the orderer endpoint
+  -o, --orderer string                      Ordering service endpoint
+      --ordererTLSHostnameOverride string   The hostname override to use when validating the TLS connection to the orderer.
+      --tls                                 Use TLS when communicating with the orderer endpoint
+      --transient string                    Transient map of arguments in JSON encoding
+
+Use "peer chaincode [command] --help" for more information about a command.
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{\"Args\":[\"query\",\"a\"]}'
+Error: chaincode argument error: invalid character '\\' looking for beginning of object key string
+Usage:
+  peer chaincode query [flags]
+
+Flags:
+  -C, --channelID string               The channel on which this command should be executed
+      --connectionProfile string       Connection profile that provides the necessary connection information for the network. Note: currently only supported for providing peer connection information
+  -c, --ctor string                    Constructor message for the chaincode in JSON format (default "{}")
+  -h, --help                           help for query
+  -x, --hex                            If true, output the query value byte array in hexadecimal. Incompatible with --raw
+  -n, --name string                    Name of the chaincode
+      --peerAddresses stringArray      The addresses of the peers to connect to
+  -r, --raw                            If true, output the query value as raw bytes, otherwise format as a printable string
+      --tlsRootCertFiles stringArray   If TLS is enabled, the paths to the TLS root cert files of the peers to connect to. The order and number of certs specified should match the --peerAddresses flag
+
+Global Flags:
+      --cafile string                       Path to file containing PEM-encoded trusted certificate(s) for the ordering endpoint
+      --certfile string                     Path to file containing PEM-encoded X509 public key to use for mutual TLS communication with the orderer endpoint
+      --clientauth                          Use mutual TLS when communicating with the orderer endpoint
+      --connTimeout duration                Timeout for client to connect (default 3s)
+      --keyfile string                      Path to file containing PEM-encoded private key to use for mutual TLS communication with the orderer endpoint
+  -o, --orderer string                      Ordering service endpoint
+      --ordererTLSHostnameOverride string   The hostname override to use when validating the TLS connection to the orderer.
+      --tls                                 Use TLS when communicating with the orderer endpoint
+      --transient string                    Transient map of arguments in JSON encoding
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","a"]}'
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","a"]}'
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query"]}'
+Error: endorsement failure during query. response: status:500 message:"failed to execute transaction e9cbd2e1d2e76add8a6cd5b6f2039693a6bb61645242cc904136a836a3326f8f: error sending: chaincode stream terminated"
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","a"]}'
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":["create_account","1", ]}'
+2020-05-31 05:51:56.204 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: chaincode argument error: invalid character ']' looking for beginning of value
+Usage:
+  peer chaincode invoke [flags]
+
+Flags:
+  -C, --channelID string               The channel on which this command should be executed
+      --connectionProfile string       Connection profile that provides the necessary connection information for the network. Note: currently only supported for providing peer connection information
+  -c, --ctor string                    Constructor message for the chaincode in JSON format (default "{}")
+  -h, --help                           help for invoke
+  -n, --name string                    Name of the chaincode
+      --peerAddresses stringArray      The addresses of the peers to connect to
+      --tlsRootCertFiles stringArray   If TLS is enabled, the paths to the TLS root cert files of the peers to connect to. The order and number of certs specified should match the --peerAddresses flag
+      --waitForEvent                   Whether to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully
+      --waitForEventTimeout duration   Time to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully (default 30s)
+
+Global Flags:
+      --cafile string                       Path to file containing PEM-encoded trusted certificate(s) for the ordering endpoint
+      --certfile string                     Path to file containing PEM-encoded X509 public key to use for mutual TLS communication with the orderer endpoint
+      --clientauth                          Use mutual TLS when communicating with the orderer endpoint
+      --connTimeout duration                Timeout for client to connect (default 3s)
+      --keyfile string                      Path to file containing PEM-encoded private key to use for mutual TLS communication with the orderer endpoint
+  -o, --orderer string                      Ordering service endpoint
+      --ordererTLSHostnameOverride string   The hostname override to use when validating the TLS connection to the orderer.
+      --tls                                 Use TLS when communicating with the orderer endpoint
+      --transient string                    Transient map of arguments in JSON encoding
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 05:52:53.169 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: error sending transaction for invoke: could not send: EOF - proposal response: version:1 response:<status:200 > payload:"\n \221\374\344i3\201>\234\003\310]\240\303R\031\205\037\206\210\243\376\020\206\322 Oj\375\215\3656\322\022\257\002\n\223\002\022\033\n\004lscc\022\023\n\021\n\013mysmallbank\022\002\010\005\022\363\001\n\013mysmallbank\022\343\001\nH\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032\226\001\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032L{\"CustomId\":\"1\",\"CustomName\":\"a\",\"SavingsBalance\":100,\"CheckingBalance\":100}\032\003\010\310\001\"\022\022\013mysmallbank\032\0031.0" endorsement:<endorser:"\n\007Org1MSP\022\252\006-----BEGIN CERTIFICATE-----\nMIICKDCCAc+gAwIBAgIRANAmGdyM4JzuVFDCq5aPGmEwCgYIKoZIzj0EAwIwczEL\nMAkGA1UEBhMCVVMxEzARBgNVBAgTCkNhbGlmb3JuaWExFjAUBgNVBAcTDVNhbiBG\ncmFuY2lzY28xGTAXBgNVBAoTEG9yZzEuZXhhbXBsZS5jb20xHDAaBgNVBAMTE2Nh\nLm9yZzEuZXhhbXBsZS5jb20wHhcNMjAwNTEyMDgwNjAwWhcNMzAwNTEwMDgwNjAw\nWjBqMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMN\nU2FuIEZyYW5jaXNjbzENMAsGA1UECxMEcGVlcjEfMB0GA1UEAxMWcGVlcjAub3Jn\nMS5leGFtcGxlLmNvbTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJFTT112EwOI\nyiCi30RehQwsAvIYjs32yl+xgR61mOJ+7OH7ixoXPhrp3Sf4cstd7T7iiHR7/cvu\nUC5+4U9gtbejTTBLMA4GA1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMCsGA1Ud\nIwQkMCKAIPt1nHYg7PvtIuG8Oo2y7cB6FSygvtveK2/i2GwGrdfUMAoGCCqGSM49\nBAMCA0cAMEQCIFtn/ew7Gldi1H7cz8zoAkcV/+o7dOOhSn3+xkUWTA7wAiA/09Uq\ntdmSBFsvxOdFPTITnZbxPEiT1P/mcq+rIfXeNg==\n-----END CERTIFICATE-----\n" signature:"0E\002!\000\246\013\357V\356o\336\036\2567\227MM^e\321'S\036n\377+\354f\265\020\373\271\364\352\014\312\002 \025\201Dw\2145\232\377\306\365fkAP\211\230\332\023\301\234!\030\261\214\275\214kH\231s\\U" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 05:53:06.470 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: error sending transaction for invoke: could not send: EOF - proposal response: version:1 response:<status:200 > payload:"\n ?\244\254\025\206\354&\217s\340&\273\3502\367\310\371\330\377\232\232c\200g\271\230{jJ'\363\223\022\257\002\n\223\002\022\033\n\004lscc\022\023\n\021\n\013mysmallbank\022\002\010\005\022\363\001\n\013mysmallbank\022\343\001\nH\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032\226\001\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032L{\"CustomId\":\"1\",\"CustomName\":\"a\",\"SavingsBalance\":100,\"CheckingBalance\":100}\032\003\010\310\001\"\022\022\013mysmallbank\032\0031.0" endorsement:<endorser:"\n\007Org1MSP\022\252\006-----BEGIN CERTIFICATE-----\nMIICKDCCAc+gAwIBAgIRANAmGdyM4JzuVFDCq5aPGmEwCgYIKoZIzj0EAwIwczEL\nMAkGA1UEBhMCVVMxEzARBgNVBAgTCkNhbGlmb3JuaWExFjAUBgNVBAcTDVNhbiBG\ncmFuY2lzY28xGTAXBgNVBAoTEG9yZzEuZXhhbXBsZS5jb20xHDAaBgNVBAMTE2Nh\nLm9yZzEuZXhhbXBsZS5jb20wHhcNMjAwNTEyMDgwNjAwWhcNMzAwNTEwMDgwNjAw\nWjBqMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMN\nU2FuIEZyYW5jaXNjbzENMAsGA1UECxMEcGVlcjEfMB0GA1UEAxMWcGVlcjAub3Jn\nMS5leGFtcGxlLmNvbTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJFTT112EwOI\nyiCi30RehQwsAvIYjs32yl+xgR61mOJ+7OH7ixoXPhrp3Sf4cstd7T7iiHR7/cvu\nUC5+4U9gtbejTTBLMA4GA1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMCsGA1Ud\nIwQkMCKAIPt1nHYg7PvtIuG8Oo2y7cB6FSygvtveK2/i2GwGrdfUMAoGCCqGSM49\nBAMCA0cAMEQCIFtn/ew7Gldi1H7cz8zoAkcV/+o7dOOhSn3+xkUWTA7wAiA/09Uq\ntdmSBFsvxOdFPTITnZbxPEiT1P/mcq+rIfXeNg==\n-----END CERTIFICATE-----\n" signature:"0E\002!\000\216\2027\373\373\213\223\024fm\274Mrk$C\270.\272\241\230\244\001\326\304\032\267\3118-\311\342\002 \np\203TIk`w\3556HZ\260\037\331>\255~1S\317^=p\030\264\267`\002\\\216\377" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 05:53:50.662 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: error sending transaction for invoke: could not send: EOF - proposal response: version:1 response:<status:200 > payload:"\n bS\215\002\354g\026\177:*&\337\272@\206<\334\243M\372\232D\023\002q\364a\341P\363\264\365\022\257\002\n\223\002\022\033\n\004lscc\022\023\n\021\n\013mysmallbank\022\002\010\005\022\363\001\n\013mysmallbank\022\343\001\nH\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032\226\001\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032L{\"CustomId\":\"1\",\"CustomName\":\"a\",\"SavingsBalance\":100,\"CheckingBalance\":100}\032\003\010\310\001\"\022\022\013mysmallbank\032\0031.0" endorsement:<endorser:"\n\007Org1MSP\022\252\006-----BEGIN CERTIFICATE-----\nMIICKDCCAc+gAwIBAgIRANAmGdyM4JzuVFDCq5aPGmEwCgYIKoZIzj0EAwIwczEL\nMAkGA1UEBhMCVVMxEzARBgNVBAgTCkNhbGlmb3JuaWExFjAUBgNVBAcTDVNhbiBG\ncmFuY2lzY28xGTAXBgNVBAoTEG9yZzEuZXhhbXBsZS5jb20xHDAaBgNVBAMTE2Nh\nLm9yZzEuZXhhbXBsZS5jb20wHhcNMjAwNTEyMDgwNjAwWhcNMzAwNTEwMDgwNjAw\nWjBqMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMN\nU2FuIEZyYW5jaXNjbzENMAsGA1UECxMEcGVlcjEfMB0GA1UEAxMWcGVlcjAub3Jn\nMS5leGFtcGxlLmNvbTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJFTT112EwOI\nyiCi30RehQwsAvIYjs32yl+xgR61mOJ+7OH7ixoXPhrp3Sf4cstd7T7iiHR7/cvu\nUC5+4U9gtbejTTBLMA4GA1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMCsGA1Ud\nIwQkMCKAIPt1nHYg7PvtIuG8Oo2y7cB6FSygvtveK2/i2GwGrdfUMAoGCCqGSM49\nBAMCA0cAMEQCIFtn/ew7Gldi1H7cz8zoAkcV/+o7dOOhSn3+xkUWTA7wAiA/09Uq\ntdmSBFsvxOdFPTITnZbxPEiT1P/mcq+rIfXeNg==\n-----END CERTIFICATE-----\n" signature:"0E\002!\000\363\031\264\272\336\367}\215\016\307\026\316\300\006!\300`.\3755UHn,GZv\313\244\330s\231\002 CL\3033\030GRO\324D\024/\3047u\331z\021\223\363\356\335\230\324>\302,\375\02649F" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{\"Args\":[\"create_account\",\"1\", \"a\", \"100\", \"100\"]}'
+2020-05-31 05:54:20.941 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: chaincode argument error: invalid character '\\' looking for beginning of object key string
+Usage:
+  peer chaincode invoke [flags]
+
+Flags:
+  -C, --channelID string               The channel on which this command should be executed
+      --connectionProfile string       Connection profile that provides the necessary connection information for the network. Note: currently only supported for providing peer connection information
+  -c, --ctor string                    Constructor message for the chaincode in JSON format (default "{}")
+  -h, --help                           help for invoke
+  -n, --name string                    Name of the chaincode
+      --peerAddresses stringArray      The addresses of the peers to connect to
+      --tlsRootCertFiles stringArray   If TLS is enabled, the paths to the TLS root cert files of the peers to connect to. The order and number of certs specified should match the --peerAddresses flag
+      --waitForEvent                   Whether to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully
+      --waitForEventTimeout duration   Time to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully (default 30s)
+
+Global Flags:
+      --cafile string                       Path to file containing PEM-encoded trusted certificate(s) for the ordering endpoint
+      --certfile string                     Path to file containing PEM-encoded X509 public key to use for mutual TLS communication with the orderer endpoint
+      --clientauth                          Use mutual TLS when communicating with the orderer endpoint
+      --connTimeout duration                Timeout for client to connect (default 3s)
+      --keyfile string                      Path to file containing PEM-encoded private key to use for mutual TLS communication with the orderer endpoint
+  -o, --orderer string                      Ordering service endpoint
+      --ordererTLSHostnameOverride string   The hostname override to use when validating the TLS connection to the orderer.
+      --tls                                 Use TLS when communicating with the orderer endpoint
+      --transient string                    Transient map of arguments in JSON encoding
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c "{\"Args\":[\"create_account\",\"1\", \"a\", \"100\", \"100\"]}"
+2020-05-31 05:54:35.432 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: error getting broadcast client: rpc error: code = Unavailable desc = transport is closing
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c "{\"Args\":[\"create_account\",\"1\", \"a\", \"100\", \"100\"]}"
+2020-05-31 05:55:02.476 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: error sending transaction for invoke: could not send: EOF - proposal response: version:1 response:<status:200 > payload:"\n \277\237\303\345\0271\033Lte\226\264`m\200\342[3\254\\\251\367\217\243f\200\324%P\254\310\322\022\257\002\n\223\002\022\033\n\004lscc\022\023\n\021\n\013mysmallbank\022\002\010\005\022\363\001\n\013mysmallbank\022\343\001\nH\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032\226\001\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032L{\"CustomId\":\"1\",\"CustomName\":\"a\",\"SavingsBalance\":100,\"CheckingBalance\":100}\032\003\010\310\001\"\022\022\013mysmallbank\032\0031.0" endorsement:<endorser:"\n\007Org1MSP\022\252\006-----BEGIN CERTIFICATE-----\nMIICKDCCAc+gAwIBAgIRANAmGdyM4JzuVFDCq5aPGmEwCgYIKoZIzj0EAwIwczEL\nMAkGA1UEBhMCVVMxEzARBgNVBAgTCkNhbGlmb3JuaWExFjAUBgNVBAcTDVNhbiBG\ncmFuY2lzY28xGTAXBgNVBAoTEG9yZzEuZXhhbXBsZS5jb20xHDAaBgNVBAMTE2Nh\nLm9yZzEuZXhhbXBsZS5jb20wHhcNMjAwNTEyMDgwNjAwWhcNMzAwNTEwMDgwNjAw\nWjBqMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMN\nU2FuIEZyYW5jaXNjbzENMAsGA1UECxMEcGVlcjEfMB0GA1UEAxMWcGVlcjAub3Jn\nMS5leGFtcGxlLmNvbTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJFTT112EwOI\nyiCi30RehQwsAvIYjs32yl+xgR61mOJ+7OH7ixoXPhrp3Sf4cstd7T7iiHR7/cvu\nUC5+4U9gtbejTTBLMA4GA1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMCsGA1Ud\nIwQkMCKAIPt1nHYg7PvtIuG8Oo2y7cB6FSygvtveK2/i2GwGrdfUMAoGCCqGSM49\nBAMCA0cAMEQCIFtn/ew7Gldi1H7cz8zoAkcV/+o7dOOhSn3+xkUWTA7wAiA/09Uq\ntdmSBFsvxOdFPTITnZbxPEiT1P/mcq+rIfXeNg==\n-----END CERTIFICATE-----\n" signature:"0D\002 e\373\321\220\351y\264\006\344&IE\236\003z\026\361v\343\352g`\301-\205\327\371\030\337\376\223\275\002 5@\271\027\244 \3759\177{\002\266\217\336U\313\273n\304\207\305\352\320;rn?\001'w\265\260" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","a"]}'
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","1"]}'
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":[\"create_account\",\"1\", \"a\", \"100\", \"100\"]}'
+2020-05-31 05:57:00.933 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: chaincode argument error: invalid character '\\' looking for beginning of value
+Usage:
+  peer chaincode invoke [flags]
+
+Flags:
+  -C, --channelID string               The channel on which this command should be executed
+      --connectionProfile string       Connection profile that provides the necessary connection information for the network. Note: currently only supported for providing peer connection information
+  -c, --ctor string                    Constructor message for the chaincode in JSON format (default "{}")
+  -h, --help                           help for invoke
+  -n, --name string                    Name of the chaincode
+      --peerAddresses stringArray      The addresses of the peers to connect to
+      --tlsRootCertFiles stringArray   If TLS is enabled, the paths to the TLS root cert files of the peers to connect to. The order and number of certs specified should match the --peerAddresses flag
+      --waitForEvent                   Whether to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully
+      --waitForEventTimeout duration   Time to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully (default 30s)
+
+Global Flags:
+      --cafile string                       Path to file containing PEM-encoded trusted certificate(s) for the ordering endpoint
+      --certfile string                     Path to file containing PEM-encoded X509 public key to use for mutual TLS communication with the orderer endpoint
+      --clientauth                          Use mutual TLS when communicating with the orderer endpoint
+      --connTimeout duration                Timeout for client to connect (default 3s)
+      --keyfile string                      Path to file containing PEM-encoded private key to use for mutual TLS communication with the orderer endpoint
+  -o, --orderer string                      Ordering service endpoint
+      --ordererTLSHostnameOverride string   The hostname override to use when validating the TLS connection to the orderer.
+      --tls                                 Use TLS when communicating with the orderer endpoint
+      --transient string                    Transient map of arguments in JSON encoding
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 05:57:31.048 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: error sending transaction for invoke: could not send: EOF - proposal response: version:1 response:<status:200 > payload:"\n \254\265Gs\333zM\315F\376\312\335\324x\200R\357\270b\265\0227\373\364\032q\350\261F\231\230q\022\257\002\n\223\002\022\033\n\004lscc\022\023\n\021\n\013mysmallbank\022\002\010\005\022\363\001\n\013mysmallbank\022\343\001\nH\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032\226\001\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032L{\"CustomId\":\"1\",\"CustomName\":\"a\",\"SavingsBalance\":100,\"CheckingBalance\":100}\032\003\010\310\001\"\022\022\013mysmallbank\032\0031.0" endorsement:<endorser:"\n\007Org1MSP\022\252\006-----BEGIN CERTIFICATE-----\nMIICKDCCAc+gAwIBAgIRANAmGdyM4JzuVFDCq5aPGmEwCgYIKoZIzj0EAwIwczEL\nMAkGA1UEBhMCVVMxEzARBgNVBAgTCkNhbGlmb3JuaWExFjAUBgNVBAcTDVNhbiBG\ncmFuY2lzY28xGTAXBgNVBAoTEG9yZzEuZXhhbXBsZS5jb20xHDAaBgNVBAMTE2Nh\nLm9yZzEuZXhhbXBsZS5jb20wHhcNMjAwNTEyMDgwNjAwWhcNMzAwNTEwMDgwNjAw\nWjBqMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMN\nU2FuIEZyYW5jaXNjbzENMAsGA1UECxMEcGVlcjEfMB0GA1UEAxMWcGVlcjAub3Jn\nMS5leGFtcGxlLmNvbTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJFTT112EwOI\nyiCi30RehQwsAvIYjs32yl+xgR61mOJ+7OH7ixoXPhrp3Sf4cstd7T7iiHR7/cvu\nUC5+4U9gtbejTTBLMA4GA1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMCsGA1Ud\nIwQkMCKAIPt1nHYg7PvtIuG8Oo2y7cB6FSygvtveK2/i2GwGrdfUMAoGCCqGSM49\nBAMCA0cAMEQCIFtn/ew7Gldi1H7cz8zoAkcV/+o7dOOhSn3+xkUWTA7wAiA/09Uq\ntdmSBFsvxOdFPTITnZbxPEiT1P/mcq+rIfXeNg==\n-----END CERTIFICATE-----\n" signature:"0E\002!\000\263\260\277\024\300jw\224o/\037\350\200\206~\205\316@\215\360\332B:b\250\340\207+\232e\310\202\002 6\335\004\341Z\003\350V\315}\3139\276D\332\312-\224\304\327\274J\327\016u\204\347\305\375$\027\253" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":["create_account","1", "a", "100", "100"]};'
+2020-05-31 05:57:41.191 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: chaincode argument error: invalid character ';' after top-level value
+Usage:
+  peer chaincode invoke [flags]
+
+Flags:
+  -C, --channelID string               The channel on which this command should be executed
+      --connectionProfile string       Connection profile that provides the necessary connection information for the network. Note: currently only supported for providing peer connection information
+  -c, --ctor string                    Constructor message for the chaincode in JSON format (default "{}")
+  -h, --help                           help for invoke
+  -n, --name string                    Name of the chaincode
+      --peerAddresses stringArray      The addresses of the peers to connect to
+      --tlsRootCertFiles stringArray   If TLS is enabled, the paths to the TLS root cert files of the peers to connect to. The order and number of certs specified should match the --peerAddresses flag
+      --waitForEvent                   Whether to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully
+      --waitForEventTimeout duration   Time to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully (default 30s)
+
+Global Flags:
+      --cafile string                       Path to file containing PEM-encoded trusted certificate(s) for the ordering endpoint
+      --certfile string                     Path to file containing PEM-encoded X509 public key to use for mutual TLS communication with the orderer endpoint
+      --clientauth                          Use mutual TLS when communicating with the orderer endpoint
+      --connTimeout duration                Timeout for client to connect (default 3s)
+      --keyfile string                      Path to file containing PEM-encoded private key to use for mutual TLS communication with the orderer endpoint
+  -o, --orderer string                      Ordering service endpoint
+      --ordererTLSHostnameOverride string   The hostname override to use when validating the TLS connection to the orderer.
+      --tls                                 Use TLS when communicating with the orderer endpoint
+      --transient string                    Transient map of arguments in JSON encoding
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 05:57:44.878 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: error sending transaction for invoke: could not send: EOF - proposal response: version:1 response:<status:200 > payload:"\n \314\006\357\367Pfj~\212\207\324\223\235\202\330)n'\264\321\202\270\223-\311t\353\246\303\245X\237\022\257\002\n\223\002\022\033\n\004lscc\022\023\n\021\n\013mysmallbank\022\002\010\005\022\363\001\n\013mysmallbank\022\343\001\nH\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032\226\001\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032L{\"CustomId\":\"1\",\"CustomName\":\"a\",\"SavingsBalance\":100,\"CheckingBalance\":100}\032\003\010\310\001\"\022\022\013mysmallbank\032\0031.0" endorsement:<endorser:"\n\007Org1MSP\022\252\006-----BEGIN CERTIFICATE-----\nMIICKDCCAc+gAwIBAgIRANAmGdyM4JzuVFDCq5aPGmEwCgYIKoZIzj0EAwIwczEL\nMAkGA1UEBhMCVVMxEzARBgNVBAgTCkNhbGlmb3JuaWExFjAUBgNVBAcTDVNhbiBG\ncmFuY2lzY28xGTAXBgNVBAoTEG9yZzEuZXhhbXBsZS5jb20xHDAaBgNVBAMTE2Nh\nLm9yZzEuZXhhbXBsZS5jb20wHhcNMjAwNTEyMDgwNjAwWhcNMzAwNTEwMDgwNjAw\nWjBqMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMN\nU2FuIEZyYW5jaXNjbzENMAsGA1UECxMEcGVlcjEfMB0GA1UEAxMWcGVlcjAub3Jn\nMS5leGFtcGxlLmNvbTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJFTT112EwOI\nyiCi30RehQwsAvIYjs32yl+xgR61mOJ+7OH7ixoXPhrp3Sf4cstd7T7iiHR7/cvu\nUC5+4U9gtbejTTBLMA4GA1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMCsGA1Ud\nIwQkMCKAIPt1nHYg7PvtIuG8Oo2y7cB6FSygvtveK2/i2GwGrdfUMAoGCCqGSM49\nBAMCA0cAMEQCIFtn/ew7Gldi1H7cz8zoAkcV/+o7dOOhSn3+xkUWTA7wAiA/09Uq\ntdmSBFsvxOdFPTITnZbxPEiT1P/mcq+rIfXeNg==\n-----END CERTIFICATE-----\n" signature:"0E\002!\000\247\202\241\265\372)\265p\275)d\320o\316\263\327\245\221\245\340\372\227\264\244J\2160@\241\242\230\007\002 \017l\360\"\323\256q(\311\354\370\0070\001\274<\301\352\026k\002}K|;ek \340P\363\301" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 05:57:49.101 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: error getting broadcast client: rpc error: code = Unavailable desc = transport is closing
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 05:57:53.446 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: error getting broadcast client: rpc error: code = Unavailable desc = transport is closing
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 05:57:58.784 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: error sending transaction for invoke: could not send: EOF - proposal response: version:1 response:<status:200 > payload:"\n \374\333/\320\253\0302\003W2\265ji\354\272\257O\273t\333\025\334BwS\213\216\315\373\377F\203\022\257\002\n\223\002\022\033\n\004lscc\022\023\n\021\n\013mysmallbank\022\002\010\005\022\363\001\n\013mysmallbank\022\343\001\nH\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032\226\001\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032L{\"CustomId\":\"1\",\"CustomName\":\"a\",\"SavingsBalance\":100,\"CheckingBalance\":100}\032\003\010\310\001\"\022\022\013mysmallbank\032\0031.0" endorsement:<endorser:"\n\007Org1MSP\022\252\006-----BEGIN CERTIFICATE-----\nMIICKDCCAc+gAwIBAgIRANAmGdyM4JzuVFDCq5aPGmEwCgYIKoZIzj0EAwIwczEL\nMAkGA1UEBhMCVVMxEzARBgNVBAgTCkNhbGlmb3JuaWExFjAUBgNVBAcTDVNhbiBG\ncmFuY2lzY28xGTAXBgNVBAoTEG9yZzEuZXhhbXBsZS5jb20xHDAaBgNVBAMTE2Nh\nLm9yZzEuZXhhbXBsZS5jb20wHhcNMjAwNTEyMDgwNjAwWhcNMzAwNTEwMDgwNjAw\nWjBqMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMN\nU2FuIEZyYW5jaXNjbzENMAsGA1UECxMEcGVlcjEfMB0GA1UEAxMWcGVlcjAub3Jn\nMS5leGFtcGxlLmNvbTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJFTT112EwOI\nyiCi30RehQwsAvIYjs32yl+xgR61mOJ+7OH7ixoXPhrp3Sf4cstd7T7iiHR7/cvu\nUC5+4U9gtbejTTBLMA4GA1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMCsGA1Ud\nIwQkMCKAIPt1nHYg7PvtIuG8Oo2y7cB6FSygvtveK2/i2GwGrdfUMAoGCCqGSM49\nBAMCA0cAMEQCIFtn/ew7Gldi1H7cz8zoAkcV/+o7dOOhSn3+xkUWTA7wAiA/09Uq\ntdmSBFsvxOdFPTITnZbxPEiT1P/mcq+rIfXeNg==\n-----END CERTIFICATE-----\n" signature:"0D\002 =\214Wy\363t6\273\025_\301\026\341z/\265\370\372\347d\227~R\266oT\322\244\205\353\010\023\002 ]\236fg\025\344-+d\245\306\014\273\326\311\363\225Y\372Y\236\330GO\206\251\3762d\003\275\203" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{/"Args/":[/"create_account/",/"1/", /"a/", /"100/", /"100/"]}'
+2020-05-31 06:00:48.128 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: chaincode argument error: invalid character '/' looking for beginning of object key string
+Usage:
+  peer chaincode invoke [flags]
+
+Flags:
+  -C, --channelID string               The channel on which this command should be executed
+      --connectionProfile string       Connection profile that provides the necessary connection information for the network. Note: currently only supported for providing peer connection information
+  -c, --ctor string                    Constructor message for the chaincode in JSON format (default "{}")
+  -h, --help                           help for invoke
+  -n, --name string                    Name of the chaincode
+      --peerAddresses stringArray      The addresses of the peers to connect to
+      --tlsRootCertFiles stringArray   If TLS is enabled, the paths to the TLS root cert files of the peers to connect to. The order and number of certs specified should match the --peerAddresses flag
+      --waitForEvent                   Whether to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully
+      --waitForEventTimeout duration   Time to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully (default 30s)
+
+Global Flags:
+      --cafile string                       Path to file containing PEM-encoded trusted certificate(s) for the ordering endpoint
+      --certfile string                     Path to file containing PEM-encoded X509 public key to use for mutual TLS communication with the orderer endpoint
+      --clientauth                          Use mutual TLS when communicating with the orderer endpoint
+      --connTimeout duration                Timeout for client to connect (default 3s)
+      --keyfile string                      Path to file containing PEM-encoded private key to use for mutual TLS communication with the orderer endpoint
+  -o, --orderer string                      Ordering service endpoint
+      --ordererTLSHostnameOverride string   The hostname override to use when validating the TLS connection to the orderer.
+      --tls                                 Use TLS when communicating with the orderer endpoint
+      --transient string                    Transient map of arguments in JSON encoding
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":["create_account","1", "a", "10/", "100"]}'
+2020-05-31 06:01:06.992 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: endorsement failure during invoke. response: status:500 message:"{\"error\":Wrong arguments of function create_account, checking balance should be integer}"
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 06:01:26.431 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: error getting broadcast client: rpc error: code = Unavailable desc = all SubConns are in TransientFailure, latest connection error: <nil>
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -C mychannel -n mysmallbank -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 06:01:33.440 UTC [chaincodeCmd] InitCmdFactory -> INFO 001 Retrieved channel (mychannel) orderer endpoint: orderer.example.com:7050
+Error: error sending transaction for invoke: could not send: EOF - proposal response: version:1 response:<status:200 > payload:"\n \300\233\217W\346\336\364\224\220\204_\016':\232\273s\243\341T\001T\337='\333\025\217!\001\245\177\022\257\002\n\223\002\022\033\n\004lscc\022\023\n\021\n\013mysmallbank\022\002\010\005\022\363\001\n\013mysmallbank\022\343\001\nH\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032\226\001\nF3325144dff4ea340f0a823f15d3f4f01ab62eae0e5da579ccb851f8db9dfe84c58b2b3\032L{\"CustomId\":\"1\",\"CustomName\":\"a\",\"SavingsBalance\":100,\"CheckingBalance\":100}\032\003\010\310\001\"\022\022\013mysmallbank\032\0031.0" endorsement:<endorser:"\n\007Org1MSP\022\252\006-----BEGIN CERTIFICATE-----\nMIICKDCCAc+gAwIBAgIRANAmGdyM4JzuVFDCq5aPGmEwCgYIKoZIzj0EAwIwczEL\nMAkGA1UEBhMCVVMxEzARBgNVBAgTCkNhbGlmb3JuaWExFjAUBgNVBAcTDVNhbiBG\ncmFuY2lzY28xGTAXBgNVBAoTEG9yZzEuZXhhbXBsZS5jb20xHDAaBgNVBAMTE2Nh\nLm9yZzEuZXhhbXBsZS5jb20wHhcNMjAwNTEyMDgwNjAwWhcNMzAwNTEwMDgwNjAw\nWjBqMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMN\nU2FuIEZyYW5jaXNjbzENMAsGA1UECxMEcGVlcjEfMB0GA1UEAxMWcGVlcjAub3Jn\nMS5leGFtcGxlLmNvbTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJFTT112EwOI\nyiCi30RehQwsAvIYjs32yl+xgR61mOJ+7OH7ixoXPhrp3Sf4cstd7T7iiHR7/cvu\nUC5+4U9gtbejTTBLMA4GA1UdDwEB/wQEAwIHgDAMBgNVHRMBAf8EAjAAMCsGA1Ud\nIwQkMCKAIPt1nHYg7PvtIuG8Oo2y7cB6FSygvtveK2/i2GwGrdfUMAoGCCqGSM49\nBAMCA0cAMEQCIFtn/ew7Gldi1H7cz8zoAkcV/+o7dOOhSn3+xkUWTA7wAiA/09Uq\ntdmSBFsvxOdFPTITnZbxPEiT1P/mcq+rIfXeNg==\n-----END CERTIFICATE-----\n" signature:"0E\002!\000\272\242\344\204):\177_+\342y\335\234\316{\020:\372\2701\303\275\323\243\334\262Gt\010\362n\233\002 \r\363\023h\346\241\337\352\260\267\242\223\"\272s\361k\216\010\374$\267\223\013`\307G\211\032]\351\364" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -c '{"Args":["create_account","1", "a", "100", "100"]}'
+Error: unknown shorthand flag: 'v' in -v
+Usage:
+  peer chaincode invoke [flags]
+
+Flags:
+  -C, --channelID string               The channel on which this command should be executed
+      --connectionProfile string       Connection profile that provides the necessary connection information for the network. Note: currently only supported for providing peer connection information
+  -c, --ctor string                    Constructor message for the chaincode in JSON format (default "{}")
+  -h, --help                           help for invoke
+  -n, --name string                    Name of the chaincode
+      --peerAddresses stringArray      The addresses of the peers to connect to
+      --tlsRootCertFiles stringArray   If TLS is enabled, the paths to the TLS root cert files of the peers to connect to. The order and number of certs specified should match the --peerAddresses flag
+      --waitForEvent                   Whether to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully
+      --waitForEventTimeout duration   Time to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully (default 30s)
+
+Global Flags:
+      --cafile string                       Path to file containing PEM-encoded trusted certificate(s) for the ordering endpoint
+      --certfile string                     Path to file containing PEM-encoded X509 public key to use for mutual TLS communication with the orderer endpoint
+      --clientauth                          Use mutual TLS when communicating with the orderer endpoint
+      --connTimeout duration                Timeout for client to connect (default 3s)
+      --keyfile string                      Path to file containing PEM-encoded private key to use for mutual TLS communication with the orderer endpoint
+  -o, --orderer string                      Ordering service endpoint
+      --ordererTLSHostnameOverride string   The hostname override to use when validating the TLS connection to the orderer.
+      --tls                                 Use TLS when communicating with the orderer endpoint
+      --transient string                    Transient map of arguments in JSON encoding
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 06:05:32.062 UTC [chaincodeCmd] chaincodeInvokeOrQuery -> INFO 001 Chaincode invoke successful. result: status:200
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","a"]}'
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'^C
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["query", "a"]}'peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'^C
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["query", "a"]}'
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["query", "1"]}'
+{"CustomId":"1","CustomName":"a","SavingsBalance":100,"CheckingBalance":100}
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","1"]}'
+{"CustomId":"1","CustomName":"a","SavingsBalance":100,"CheckingBalance":100}
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke
+Error: The required parameter 'channelID' is empty. Rerun the command with -C flag
+Usage:
+  peer chaincode invoke [flags]
+
+Flags:
+  -C, --channelID string               The channel on which this command should be executed
+      --connectionProfile string       Connection profile that provides the necessary connection information for the network. Note: currently only supported for providing peer connection information
+  -c, --ctor string                    Constructor message for the chaincode in JSON format (default "{}")
+  -h, --help                           help for invoke
+  -n, --name string                    Name of the chaincode
+      --peerAddresses stringArray      The addresses of the peers to connect to
+      --tlsRootCertFiles stringArray   If TLS is enabled, the paths to the TLS root cert files of the peers to connect to. The order and number of certs specified should match the --peerAddresses flag
+      --waitForEvent                   Whether to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully
+      --waitForEventTimeout duration   Time to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully (default 30s)
+
+Global Flags:
+      --cafile string                       Path to file containing PEM-encoded trusted certificate(s) for the ordering endpoint
+      --certfile string                     Path to file containing PEM-encoded X509 public key to use for mutual TLS communication with the orderer endpoint
+      --clientauth                          Use mutual TLS when communicating with the orderer endpoint
+      --connTimeout duration                Timeout for client to connect (default 3s)
+      --keyfile string                      Path to file containing PEM-encoded private key to use for mutual TLS communication with the orderer endpoint
+  -o, --orderer string                      Ordering service endpoint
+      --ordererTLSHostnameOverride string   The hostname override to use when validating the TLS connection to the orderer.
+      --tls                                 Use TLS when communicating with the orderer endpoint
+      --transient string                    Transient map of arguments in JSON encoding
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'
+Error: endorsement failure during invoke. response: status:500 message:"{\"error\":Can not create duplicated account}"
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","2", "b", "150", "150"]}'
+2020-05-31 06:17:46.774 UTC [chaincodeCmd] chaincodeInvokeOrQuery -> INFO 001 Chaincode invoke successful. result: status:200
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","3", "c", "300", "300"]}'
+2020-05-31 06:18:04.275 UTC [chaincodeCmd] chaincodeInvokeOrQuery -> INFO 001 Chaincode invoke successful. result: status:200
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","1"]}'
+{"CustomId":"1","CustomName":"a","SavingsBalance":100,"CheckingBalance":100}
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","2"]}'
+{"CustomId":"2","CustomName":"b","SavingsBalance":150,"CheckingBalance":150}
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","3"]}'
+{"CustomId":"3","CustomName":"c","SavingsBalance":300,"CheckingBalance":300}
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# echo $CORE_PEER_ADDRESS
+peer0.org1.example.com:7051
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CORE_PEER_ADDRESS=peer0.org2.example.com:9051
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# echo $CORE_PEER_ADDRESS
+peer0.org2.example.com:9051
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","4", "d", "300", "300"]}'
+Error: error getting endorser client for invoke: endorser client failed to connect to peer0.org2.example.com:9051: failed to create new connection: context deadline exceeded
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode list --installed
+Error: error getting endorser client for list: endorser client failed to connect to peer0.org2.example.com:9051: failed to create new connection: context deadline exceeded
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CORE_PEER_ADDRESS=peer0.org2.example.com:7051
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode list --installed
+Error: error getting endorser client for list: endorser client failed to connect to peer0.org2.example.com:7051: failed to create new connection: connection error: desc = "transport: error while dialing: dial tcp 172.18.0.2:7051: connect: connection refused"
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CORE_PEER_ADDRESS=peer0.org2.example.com:9051
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode list --installed
+Error: error getting endorser client for list: endorser client failed to connect to peer0.org2.example.com:9051: failed to create new connection: context deadline exceeded
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CORE_PEER_ADDRESS=peer0.org1.example.com:7051
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode list --installed
+Get installed chaincodes on peer:
+Name: mycc, Version: 1.0, Path: github.com/chaincode/chaincode_example02/go/, Id: 333a19b11063d0ade7be691f9f22c04ad369baba15660f7ae9511fd1a6488209
+Name: mysmallbank, Version: 1.0, Path: github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank, Id: d749d6db160c6a2f07fe144ea0d59ef1b6ee20c57abfb6f6629a1dbc98ee6398
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# echo $CORE_PEER_LOCALMSPID
+Org1MSP
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# echo $CORE_PEER_LOCALMSPIDc^C
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+> CORE_PEER_LOCALMSPID=Org2MSP \
+> PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+> CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+> peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'
+Error: endorsement failure during invoke. response: status:500 message:"{\"error\":Can not create duplicated account}"
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+> CORE_PEER_LOCALMSPID=Org2MSP \
+> PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+> CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+> peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","4", "d", "100", "100"]}'
+2020-05-31 06:34:29.585 UTC [chaincodeCmd] chaincodeInvokeOrQuery -> INFO 001 Chaincode invoke successful. result: status:200
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer0.org2.example.com
+bash: peer0.org2.example.com: command not found
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","4"]}'
+{"CustomId":"4","CustomName":"d","SavingsBalance":100,"CheckingBalance":100}
+
+
+
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CC_NAME=mysmallbankEndor
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CC_VERSION=1.0
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CC_LANGUAGE=golang
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CC_PATH=/opt/gopath/src/github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# export CC_PATH=github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org1.example.com:7051 \
+> CORE_PEER_LOCALMSPID=Org1MSP \
+> CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp \
+> PEER0_ORG1_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp \
+PEER0_ORG1_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+
+CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+CORE_PEER_LOCALMSPID=Org2MSP \
+PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+
+CORE_PEER_ADDRESS=peer1.org2.example.com:10051 \
+CORE_PEER_LOCALMSPID=Org2MSP \
+PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH2020-05-31 06:42:37.638 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 06:42:37.638 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+2020-05-31 06:42:37.970 UTC [chaincodeCmd] install -> INFO 003 Installed remotely response:<status:200 payload:"OK" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer1.org1.example.com:8051 \
+> CORE_PEER_LOCALMSPID=Org1MSP \
+> CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp \
+> PEER0_ORG1_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+2020-05-31 06:42:38.123 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 06:42:38.123 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+2020-05-31 06:42:38.430 UTC [chaincodeCmd] install -> INFO 003 Installed remotely response:<status:200 payload:"OK" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+> CORE_PEER_LOCALMSPID=Org2MSP \
+> PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+> CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+> peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+2020-05-31 06:42:38.565 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 06:42:38.565 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+2020-05-31 06:42:38.886 UTC [chaincodeCmd] install -> INFO 003 Installed remotely response:<status:200 payload:"OK" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer1.org2.example.com:10051 \
+> CORE_PEER_LOCALMSPID=Org2MSP \
+> PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+> CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+> peer chaincode install -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -p $CC_PATH
+2020-05-31 06:42:40.146 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 06:42:40.147 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+2020-05-31 06:42:40.466 UTC [chaincodeCmd] install -> INFO 003 Installed remotely response:<status:200 payload:"OK" >
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode instantiate -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -v $CC_VERSION -l $CC_LANGUAGE -c '{"Args":[""]}' -P "AND('Org1MSP.member','Org2MSP.member')"
+2020-05-31 06:42:49.184 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 001 Using default escc
+2020-05-31 06:42:49.184 UTC [chaincodeCmd] checkChaincodeCmdParams -> INFO 002 Using default vscc
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode list --instantiated -C $CHANNEL_NAME
+Get instantiated chaincodes on channel mychannel:
+Name: mycc, Version: 1.0, Path: github.com/chaincode/chaincode_example02/go/, Escc: escc, Vscc: vscc
+Name: mysmallbank, Version: 1.0, Path: github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank, Escc: escc, Vscc: vscc
+Name: mysmallbankEndor, Version: 1.0, Path: github.com/nexledger/accelerator/innovation-sandbox/caliper/src/contract/fabric/smallbank, Escc: escc, Vscc: vscc
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}
+>
+> ^C
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}
+> ^C
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# ^C
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 06:43:50.372 UTC [chaincodeCmd] chaincodeInvokeOrQuery -> INFO 001 Chaincode invoke successful. result: status:200
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer#
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","1"]}'
+{"CustomId":"1","CustomName":"a","SavingsBalance":100,"CheckingBalance":100}
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+> CORE_PEER_LOCALMSPID=Org2MSP \
+> PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+> CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+> peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 06:46:11.424 UTC [chaincodeCmd] chaincodeInvokeOrQuery -> INFO 001 Chaincode invoke successful. result: status:200
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org2.example.com:9051 CORE_PEER_LOCALMSPID=Org2MSP PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 06:46:59.582 UTC [chaincodeCmd] chaincodeInvokeOrQuery -> INFO 001 Chaincode invoke successful. result: status:200
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org2.example.com:9051 CORE_PEER_LOCALMSPID=Org2MSP PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}'
+2020-05-31 06:47:02.066 UTC [chaincodeCmd] chaincodeInvokeOrQuery -> INFO 001 Chaincode invoke successful. result: status:200
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","1"]}'
+{"CustomId":"1","CustomName":"a","SavingsBalance":100,"CheckingBalance":100}
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_ADDRESS=peer0.org2.example.com:9051 \
+> CORE_PEER_LOCALMSPID=Org2MSP \
+> PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+> CORE_PEER_TLS_ROOTCERT_FILE=$PEER0_ORG2_CA \
+> CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp \
+> peer chaincode query -C mychannel -n mysmallbank -c '{"Args":["query","1"]}'
+{"CustomId":"1","CustomName":"a","SavingsBalance":100,"CheckingBalance":100}
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}' -h
+Invoke the specified chaincode. It will try to commit the endorsed transaction to the network.
+
+Usage:
+  peer chaincode invoke [flags]
+
+Flags:
+  -C, --channelID string               The channel on which this command should be executed
+      --connectionProfile string       Connection profile that provides the necessary connection information for the network. Note: currently only supported for providing peer connection information
+  -c, --ctor string                    Constructor message for the chaincode in JSON format (default "{}")
+  -h, --help                           help for invoke
+  -n, --name string                    Name of the chaincode
+      --peerAddresses stringArray      The addresses of the peers to connect to
+      --tlsRootCertFiles stringArray   If TLS is enabled, the paths to the TLS root cert files of the peers to connect to. The order and number of certs specified should match the --peerAddresses flag
+      --waitForEvent                   Whether to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully
+      --waitForEventTimeout duration   Time to wait for the event from each peer's deliver filtered service signifying that the 'invoke' transaction has been committed successfully (default 30s)
+
+Global Flags:
+      --cafile string                       Path to file containing PEM-encoded trusted certificate(s) for the ordering endpoint
+      --certfile string                     Path to file containing PEM-encoded X509 public key to use for mutual TLS communication with the orderer endpoint
+      --clientauth                          Use mutual TLS when communicating with the orderer endpoint
+      --connTimeout duration                Timeout for client to connect (default 3s)
+      --keyfile string                      Path to file containing PEM-encoded private key to use for mutual TLS communication with the orderer endpoint
+  -o, --orderer string                      Ordering service endpoint
+      --ordererTLSHostnameOverride string   The hostname override to use when validating the TLS connection to the orderer.
+      --tls                                 Use TLS when communicating with the orderer endpoint
+      --transient string                    Transient map of arguments in JSON encoding
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}' --peerAddresses peer0.org1.example.com:7051,peer0.org2.example.com:9051
+Error: error getting endorser client for invoke: tls root cert file must be set
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}' --peerAddresses peer0.org1.example.com:7051,peer0.org2.example.com:9051 --tlsRootCertFiles ^C
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}' --peerAddresses peer0.org1.example.com:7051,peer0.org2.example.com:9051 --tlsRootCertFiles $CORE_PEER_TLS_ROOTCERT_FILE,$PEER0_ORG2_CA
+bash: chaincode: command not found
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}' --peerAddresses peer0.org1.example.com:7051,peer0.org2.example.com:9051 --tlsRootCertFiles $CORE_PEER_TLS_ROOTCERT_FILE,$PEER0_ORG2_CA
+Error: error getting endorser client for invoke: unable to load TLS root cert file from /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt,: open /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt,: no such file or directory
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# ls crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/
+ca.crt      server.crt  server.key
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# ls crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/^C
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}' --peerAddresses peer0.org1.example.com:7051,peer0.org2.example.com:9051 --tlsRootCertFiles $CORE_PEER_TLS_ROOTCERT_FILE $PEER0_ORG2_CA
+Error: error getting endorser client for invoke: endorser client failed to connect to peer0.org1.example.com:7051,peer0.org2.example.com:9051: failed to create new connection: connection error: desc = "transport: error while dialing: dial tcp: address peer0.org1.example.com:7051,peer0.org2.example.com:9051: too many colons in address"
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}' --peerAddresses peer0.org1.example.com:7051,peer0.org2.example.com:9051 --tlsRootCertFiles [$CORE_PEER_TLS_ROOTCERT_FILE,$PEER0_ORG2_CA]
+Error: error getting endorser client for invoke: unable to load TLS root cert file from [/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt,]: open [/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt,]: no such file or directory
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}' --peerAddresses peer0.org1.example.com:7051,peer0.org2.example.com:9051 --tlsRootCertFiles [$CORE_PEER_TLS_ROOTCERT_FILE,$PEER0_ORG2_CA]^C
+root@ded20cb2b268:/opt/gopath/src/github.com/hyperledger/fabric/peer# CORE_PEER_TLS_ROOTCERT_FILE=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt \
+> PEER0_ORG2_CA=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt \
+> peer chaincode invoke -o orderer.example.com:7050 --tls --cafile $ORDERER_CA -C $CHANNEL_NAME -n $CC_NAME -c '{"Args":["create_account","1", "a", "100", "100"]}' --peerAddresses peer0.org1.example.com:7051,peer0.org2.example.com:9051 --tlsRootCertFiles $CORE_PEER_TLS_ROOTCERT_FILE,$PEER0_ORG2_CA
+Error: error getting endorser client for invoke: unable to load TLS root cert file from /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt,: open /opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt,: no such file or directory
